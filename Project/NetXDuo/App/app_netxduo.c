@@ -324,7 +324,6 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	{
 		printf("UDP Server listening on PORT 5000.\n");
 	}
-
 	// start the loop
 	while (1)
 	{

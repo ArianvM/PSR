@@ -19,10 +19,8 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include <motor_driver_set.h>
 #include "app_threadx.h"
-
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
 #include "main.h"
 /* USER CODE END Includes */
 
@@ -34,8 +32,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define TRACEX_BUFFER_SIZE		64000
-#define LED_THREAD_STACK_SIZE	4096
-#define LED_THREAD_PRIORITY		10
+#define TEST_THREAD_SIZE		1024
+#define TEST_THREAD_PRIORITY	10
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,12 +45,12 @@
 /* USER CODE BEGIN PV */
 uint8_t tracex_buffer[TRACEX_BUFFER_SIZE];
 
-TX_THREAD led_thread;
+TX_THREAD test_thread;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-void led_thread_entry(ULONG init);
+void test_thread_entry(ULONG init);
 /* USER CODE END PFP */
 
 /**
@@ -68,15 +66,15 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   VOID *pointer;
 
   // stack allocation for LED thread
-  ret = tx_byte_allocate(bytePool, &pointer, LED_THREAD_STACK_SIZE, TX_NO_WAIT);
+  ret = tx_byte_allocate(bytePool, &pointer, TEST_THREAD_SIZE, TX_NO_WAIT);
 
   if (ret != TX_SUCCESS)
     return ret;
 
 
   // LED thread create
-  ret = tx_thread_create(&led_thread, "LED thread", led_thread_entry, 1234,
-	  pointer, LED_THREAD_STACK_SIZE, LED_THREAD_PRIORITY, LED_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+  ret = tx_thread_create(&test_thread, "LED thread", test_thread_entry, 1234,
+	  pointer, TEST_THREAD_SIZE, TEST_THREAD_PRIORITY, TEST_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
 
   if (ret != TX_SUCCESS)
     return ret;
@@ -111,12 +109,21 @@ void MX_ThreadX_Init(void)
 
 /* USER CODE BEGIN 1 */
 
-void led_thread_entry(ULONG init)
+void test_thread_entry(ULONG init)
 {
+	motor_init();
+	int test_vals[] = {10, -20, 30, -50, 100, -150, 200, -300, 400, -500};
+
 	while(1)
 	{
-
+		printf("---TESTING MOTOR DRIVER---\n");
 		tx_thread_sleep(20);
+		for (int i = 0; i < sizeof(test_vals)/sizeof(int); i++) {
+			int val = test_vals[i];
+			printf("Setting position %d\n", val);
+			motor_set_speed(val);
+			tx_thread_sleep(500);
+		}
 	}
 }
 
