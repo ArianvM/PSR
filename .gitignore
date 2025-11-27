@@ -1,4 +1,5 @@
 PSR*
+!*/*.ioc
 #settings
 .settings/
 
