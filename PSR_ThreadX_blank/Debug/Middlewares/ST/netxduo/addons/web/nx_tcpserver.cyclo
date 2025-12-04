@@ -1,0 +1,15 @@
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:87:13:_nx_tcpserver_session_allocate	6
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:172:13:_nx_tcpserver_relisten	8
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:290:6:_nx_tcpserver_create	2
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:670:6:_nx_tcpserver_start	4
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:744:13:_nx_tcpserver_connect_present	1
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:796:13:_nx_tcpserver_data_present	1
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:845:13:_nx_tcpserver_disconnect_present	1
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:893:13:_nx_tcpserver_timeout	1
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:956:13:_nx_tcpserver_connect_process	12
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1099:13:_nx_tcpserver_data_process	4
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1173:13:_nx_tcpserver_disconnect_process	6
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1253:13:_nx_tcpserver_timeout_process	6
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1345:13:_nx_tcpserver_thread_entry	6
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1449:6:_nx_tcpserver_stop	3
+../Middlewares/ST/netxduo/addons/web/nx_tcpserver.c:1525:6:_nx_tcpserver_delete	2
