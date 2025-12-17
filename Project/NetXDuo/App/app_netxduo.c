@@ -59,6 +59,8 @@ CHAR *ftpServerStack;
 extern TX_SEMAPHORE sdMountDone;
 extern FX_MEDIA        sdio_disk;
 
+extern TX_QUEUE q_motor_ref;
+
 NX_WEB_HTTP_SERVER httpServer;
 CHAR *httpServerStack;
 
@@ -257,9 +259,9 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	UCHAR data_buffer[128];
 	NX_PACKET *incoming_packet;
 	NX_PACKET *outcoming_packet;
-	ULONG ipAddress;
+	ULONG ipAddress = IP_ADDRESS(192, 168, 1, 4);
 	UINT port;
-
+	UINT port_local = 5001;
 	// waiting for SD card mount and then start the FTP server
 	ret = tx_semaphore_get(&sdMountDone, TX_WAIT_FOREVER);
 	if (ret == TX_SUCCESS)
@@ -311,7 +313,7 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	}
 
 	// bind the socket to the port 5000 - this is the nucleo board local port
-	ret = nx_udp_socket_bind(&UDPSocket, 5000, TX_WAIT_FOREVER);
+	ret = nx_udp_socket_bind(&UDPSocket, port_local, TX_WAIT_FOREVER);
 	if (ret != NX_SUCCESS)
 	{
 		printf("Binding error. %02X\n", ret);
@@ -322,7 +324,7 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	}
 	else
 	{
-		printf("UDP Server listening on PORT 5000.\n");
+		printf("UDP Server listening on PORT %i.\n", port_local);
 	}
 	// start the loop
 	while (1)
@@ -342,6 +344,13 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 				printf("Socket received %d bytes from %d.%d.%d.%d:%d\n",
 						(int) bytes_read, (int) (ipAddress >> 24) & 0xFF, (int) (ipAddress >> 16) & 0xFF,
 						(int) (ipAddress >> 8) & 0xFF, (int) ipAddress & 0xFF, port);
+
+
+				char cmd[3];
+				memcpy(cmd, data_buffer, 3);
+				int pos = atoi(cmd);
+				printf("UDP: received Pos: %d\n", pos);
+				tx_queue_send(&q_motor_ref, &pos, TX_NO_WAIT);
 
 				// allocate packet for reply
 				ret = nx_packet_allocate(&NxAppPool, &outcoming_packet, NX_UDP_PACKET, 100);
