@@ -47,7 +47,7 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TX_THREAD      NxAppThread;
+TX_THREAD      ServerThread;
 NX_PACKET_POOL NxAppPool;
 NX_IP          NetXDuoEthIpInstance;
 /* USER CODE BEGIN PV */
@@ -60,6 +60,8 @@ extern TX_SEMAPHORE sdMountDone;
 extern FX_MEDIA        sdio_disk;
 
 extern TX_QUEUE q_motor_ref;
+extern TX_QUEUE q_motor_pos;
+extern TX_QUEUE q_motor_speed;
 
 NX_WEB_HTTP_SERVER httpServer;
 CHAR *httpServerStack;
@@ -76,7 +78,7 @@ static NX_WEB_HTTP_SERVER_MIME_MAP app_mime_maps[] =
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-static VOID nx_app_thread_entry (ULONG thread_input);
+static VOID server_thread (ULONG thread_input);
 /* USER CODE BEGIN PFP */
 UINT ftpLogin(struct NX_FTP_SERVER_STRUCT *ftp_server_ptr, ULONG client_ip_address, UINT client_port, CHAR *name, CHAR *password, CHAR *extra_info);
 UINT ftpLogout(struct NX_FTP_SERVER_STRUCT *ftp_server_ptr, ULONG client_ip_address, UINT client_port, CHAR *name, CHAR *password, CHAR *extra_info);
@@ -194,14 +196,14 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
     return NX_NOT_SUCCESSFUL;
   }
 
-   /* Allocate the memory for main thread   */
+   /* Allocate the memory for server thread   */
   if (tx_byte_allocate(byte_pool, (VOID **) &pointer, NX_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
   {
     return TX_POOL_ERROR;
   }
 
-  /* Create the main thread */
-  ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry , 0, pointer, NX_APP_THREAD_STACK_SIZE,
+  /* Create the server thread */
+  ret = tx_thread_create(&ServerThread, "NetXDuo Server thread", server_thread , 0, pointer, NX_APP_THREAD_STACK_SIZE,
                          NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
 
   if (ret != TX_SUCCESS)
@@ -250,7 +252,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
 * @param thread_input: ULONG user argument used by the thread entry
 * @retval none
 */
-static VOID nx_app_thread_entry (ULONG thread_input)
+static VOID server_thread (ULONG thread_input)
 {
   /* USER CODE BEGIN Nx_App_Thread_Entry 0 */
 
@@ -258,14 +260,21 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	ULONG bytes_read;
 	UCHAR data_buffer[128];
 	NX_PACKET *incoming_packet;
-	NX_PACKET *outcoming_packet;
-	ULONG ipAddress = IP_ADDRESS(192, 168, 1, 4);
+	ULONG ipAddress; // = IP_ADDRESS(192, 168, 1, 3);
 	UINT port;
 	UINT port_local = 5001;
+
+	NX_PACKET *outcoming_packet;
+	// ULONG ipAddress; // = IP_ADDRESS(192, 168, 1, 3);
+	UINT pos_curr;
+	double speed_curr;
+
+	UINT ref;
 	// waiting for SD card mount and then start the FTP server
 	ret = tx_semaphore_get(&sdMountDone, TX_WAIT_FOREVER);
 	if (ret == TX_SUCCESS)
 	{
+		/*
 		// create the FTP server
 		ret =  nx_ftp_server_create(&ftpServer, "FTP Server Instance", &NetXDuoEthIpInstance,
 										  &sdio_disk, ftpServerStack, 2*NX_APP_THREAD_STACK_SIZE, &NxAppPool,
@@ -300,6 +309,7 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 			printf("HTTP server started.\n");
 		}
 	}
+	*/
 
 	// create UDP socket
 	ret = nx_udp_socket_create(&NetXDuoEthIpInstance, &UDPSocket, "UDP Server Socket", NX_IP_NORMAL, NX_FRAGMENT_OKAY, NX_IP_TIME_TO_LIVE, 2);
@@ -329,6 +339,8 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	// start the loop
 	while (1)
 	{
+		tx_queue_receive(&q_motor_pos, &pos_curr, TX_NO_WAIT);
+		tx_queue_receive(&q_motor_speed, &speed_curr, TX_NO_WAIT);
 		// wait for one second or until the UDP is received
 		ret = nx_udp_socket_receive(&UDPSocket, &incoming_packet, 100);
 
@@ -348,55 +360,62 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 
 				char cmd[3];
 				memcpy(cmd, data_buffer, 3);
-				int pos = atoi(cmd);
-				printf("UDP: received Pos: %d\n", pos);
-				tx_queue_send(&q_motor_ref, &pos, TX_NO_WAIT);
+				ref = atoi(cmd);
+				printf("UDP: received Pos: %d\n", ref);
+				tx_queue_send(&q_motor_ref, &ref, TX_NO_WAIT);
 
-				// allocate packet for reply
-				ret = nx_packet_allocate(&NxAppPool, &outcoming_packet, NX_UDP_PACKET, 100);
-				if (ret != NX_SUCCESS)
-				{
-					// if error has been detected, print the error code and jump to the beginning of the while loop commands
-					printf("Packet allocate error %02x\n", ret);
-					continue;
-				}
-
-				// append data to the packet
-				ret = nx_packet_data_append(outcoming_packet, data_buffer,
-						bytes_read, &NxAppPool, 100);
-
-				if (ret != NX_SUCCESS)
-				{
-					// if error has been detected, print the error code and jump to the beginning of the while loop commands
-					printf("Packet append error %02x\n", ret);
-					continue;
-				}
-
-				// send the data to the IP address and port which has been extracted from the incoming packet
-				ret = nx_udp_socket_send(&UDPSocket, outcoming_packet,	ipAddress, port);
-				if (ret != NX_SUCCESS)
-				{
-					// in the case of socket send failure we MUST release the outcoming packet!
-					printf("UDP send error %02x\n", ret);
-					nx_packet_release(outcoming_packet);
-				}
-				else
-				{
-					// in the case of socket success we MUST NOT release the outcoming packet!
-					printf("UDP send successfully\n");
-				}
 			}
 
 			// we MUST always release the incoming packet
 			nx_packet_release(incoming_packet);
 			printf("Packets available %d\n\n", (int) NxAppPool.nx_packet_pool_available);
+
+			char pos[4];
+			char speed[5];
+			char msg[9];
+			snprintf(pos, sizeof(pos), "%d", pos_curr);				// allocate packet for reply
+			snprintf(speed, sizeof(speed), "%d", (int)speed_curr);				// allocate packet for reply
+			snprintf(msg, sizeof(msg), "%s:%s", pos, speed);
+			ret = nx_packet_allocate(&NxAppPool, &outcoming_packet, NX_UDP_PACKET, 100);
+			if (ret != NX_SUCCESS)
+			{
+				// if error has been detected, print the error code and jump to the beginning of the while loop commands
+				printf("Packet allocate error %02x\n", ret);
+				continue;
+			}
+
+			// append data to the packet
+			ret = nx_packet_data_append(outcoming_packet, msg,
+					9, &NxAppPool, 100);
+
+			if (ret != NX_SUCCESS)
+			{
+				// if error has been detected, print the error code and jump to the beginning of the while loop commands
+				printf("Packet append error %02x\n", ret);
+				continue;
+			}
+
+			// send the data to the IP address and port which has been extracted from the incoming packet
+			ret = nx_udp_socket_send(&UDPSocket, outcoming_packet,	ipAddress, port);
+			if (ret != NX_SUCCESS)
+			{
+				// in the case of socket send failure we MUST release the outcoming packet!
+				printf("UDP send error %02x\n", ret);
+				nx_packet_release(outcoming_packet);
+			}
+			else
+			{
+				// in the case of socket success we MUST NOT release the outcoming packet!
+				printf("UDP send successfully: POS: %s, SPEED: %s\n", pos, speed);
+			}
 		}
 	}
 
   /* USER CODE END Nx_App_Thread_Entry 0 */
-
 }
+
 /* USER CODE BEGIN 1 */
+}
 UINT ftpLogin(struct NX_FTP_SERVER_STRUCT *ftp_server_ptr, ULONG client_ip_address, UINT client_port, CHAR *name, CHAR *password, CHAR *extra_info)
 {
 	// we will accept all login attempts regardless the login and password

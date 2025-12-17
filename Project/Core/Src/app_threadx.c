@@ -55,6 +55,8 @@ uint8_t tracex_buffer[TRACEX_BUFFER_SIZE];
 TX_THREAD test_thread;
 TX_THREAD controller_thread;
 TX_QUEUE q_motor_ref;
+TX_QUEUE q_motor_pos;
+TX_QUEUE q_motor_speed;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,9 +83,26 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
 	UINT msg_size = 1;
 	UINT num_msg = 10;
 	ULONG queue_size = num_msg * (msg_size * 4);
-	tx_byte_allocate(bytePool, &pointer, queue_size, TX_NO_WAIT);
+	ret = tx_byte_allocate(bytePool, &pointer, queue_size, TX_NO_WAIT);
 
 	ret = tx_queue_create(&q_motor_ref, "MOTOR_POSITION_REFERENCE", sizeof(UINT), pointer, queue_size);
+
+	// Initialize msg-queues for motor states
+	// Position Queue
+	msg_size = 1;
+	num_msg = 100;
+	queue_size = num_msg * (msg_size * 4);
+	ret = tx_byte_allocate(bytePool, &pointer, queue_size, TX_NO_WAIT);
+
+	ret = tx_queue_create(&q_motor_pos, "MOTOR_POSITION_ACTUAL", sizeof(UINT), pointer, queue_size);
+
+	// PWM Queue
+	msg_size = 2;
+	num_msg = 100;
+	queue_size = num_msg * (msg_size * 4);
+	ret = tx_byte_allocate(bytePool, &pointer, queue_size, TX_NO_WAIT);
+
+	ret = tx_queue_create(&q_motor_speed, "MOTOR_SPEED", sizeof(double), pointer, queue_size);
 
 	// Initialize motor
 	if(motor_init() != TX_SUCCESS) {
@@ -192,7 +211,7 @@ void controller_thread_entry(ULONG constants) {
 	double I = 0;
 	double kp = 1;
 	double ki = 0.05;
-	double kd = 0.0;
+	double kd = 0.01;
 
 	double Ts = 1.0/TX_TIMER_TICKS_PER_SECOND;
 
@@ -200,6 +219,9 @@ void controller_thread_entry(ULONG constants) {
 
 		tx_queue_receive(&q_motor_ref, &pos_ref, TX_NO_WAIT);
 		motor_get_pos(&pos_curr);
+
+		tx_queue_send(&q_motor_pos, &pos_curr, TX_NO_WAIT);
+		tx_queue_send(&q_motor_speed, &speed, TX_NO_WAIT);
 
 		printf("Current position %d\n", pos_curr);
 
@@ -223,7 +245,6 @@ void controller_thread_entry(ULONG constants) {
 		motor_set_speed(speed);
 
 		err_prev = err_curr;
-
 
 		tx_thread_sleep(Ts * TX_TIMER_TICKS_PER_SECOND);
 	}
