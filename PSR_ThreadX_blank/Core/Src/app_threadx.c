@@ -135,7 +135,7 @@ void led_thread_entry(ULONG init)
 	        current_position = encoder_driver_get_position();
 
 	        // 2. Print to the Serial Console (UART)
-	        printf("\n",  current_position % 500);
+	        printf("Position: %d\r\n", current_position);
 
 	        tx_thread_sleep(20);
 	    }

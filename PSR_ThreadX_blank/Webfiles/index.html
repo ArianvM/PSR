@@ -1,121 +1,172 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A layout example with a side menu that hides on mobile, just like the Pure website.">
-    <title>PSR Base Board</title>
-    
-    <link rel="stylesheet" href="pure-min.css" type="text/css" media="screen">
-    <link rel="stylesheet" href="pure.css" type="text/css" media="screen">
-    
-<script>
-
- function AJAX(url, callback)
- { 
-	 var req = AJAX_init(); 
-	 req.onreadystatechange = AJAX_processRequest; 
-	 
-	 function AJAX_init() { 
-		 if (window.XMLHttpRequest) { 
-		 	return new XMLHttpRequest(); 
-		 } else if (window.ActiveXObject) { 
-		 	return new ActiveXObject('Microsoft.XMLHTTP'); 
-		 } 
-	 };	  
-	 function AJAX_processRequest() { 
-		 if(req.readyState == 4) { 
-		 	if(req.status == 200) { 
-		 	if(callback) 
-		 		callback(req.responseText); 
-		 	} 
-		 } 
-	 }; 	 
-	 this.doGet = function() { 
-		 req.open('GET', url, true); 
-		 req.send(null); 
-	 };	  
-	 this.doPost = function(body) { 
-		 req.open('POST', url, true); 
-		 req.setRequestHeader('Content-Type', 
-		 'application/x-www-form-urlencoded'); 
-		 req.setRequestHeader('ISAJAX','yes'); 
-		 req.send(body); 
-	 }; 
- };
- function $(id){return document.getElementById(id);}  
- function $$(id){return document.getElementsByName(id);} 
-
-/* Get: Devinfo */
-/* function DevinfoCallback(), getDevinfo() */
- 
- function toggleLed(LED)
-{ 
-    setTimeout(function(){ 		 
-		 dout=new AJAX('LED' + LED, function(t){ 
-		 	try{eval(t);}catch(e){alert(e);} 
-		 }); 
-		 
-		 var post = 'LED' + LED;		 
-		 dout.doPost(post); 		 
-	},300);
- };
-
-</script>
-    
+    <title>STM32 Motor Control</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; color: #333; text-align: center; padding: 20px; }
+        h1 { margin-bottom: 10px; }
+        .status-bar { font-size: 1.2rem; margin-bottom: 20px; font-weight: bold; }
+        
+        .graph-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 0 auto 20px auto;
+            padding: 10px;
+            width: 90%;
+            max-width: 800px;
+        }
+        
+        canvas { width: 100%; height: 300px; display: block; }
+        
+        .legend { display: flex; justify-content: center; gap: 20px; margin-top: 5px; font-size: 0.9rem; }
+        .legend-item { display: flex; align-items: center; }
+        .color-box { width: 15px; height: 15px; margin-right: 5px; border-radius: 3px; }
+        
+        /* Specific Colors */
+        .color-ref { background-color: #FF5733; } /* Red/Orange */
+        .color-pos { background-color: #3375FF; } /* Blue */
+        .color-pwm { background-color: #28B463; } /* Green */
+    </style>
 </head>
 <body>
 
-
-
-<div id="layout">
-    <!-- Menu toggle -->
-    <a href="#menu" id="menuLink" class="menu-link">
-        <!-- Hamburger icon -->
-        <span></span>
-    </a>
-
-    <div id="menu">
-        <div class="pure-menu">
-           <a class="pure-menu-heading" href="index.html"><img src=logo.svg width=240></a>
-
-             <ul class="pure-menu-list">
-            	<li class="pure-menu-item"><a href="index.html" class="pure-menu-link">Home page</a></li>
-            </ul>
-        </div>
-    </div>
-
-    <div id="main">
-        <div class="header">
-            <h1>PSR Base board</h1>
-            <h2>Device Status</h2>
-        </div>
-
-        <div class="content">
-        
-		<form class="pure-form pure-form-aligned">        
-		<fieldset>
-		
-        <h2 class="content-subhead">LED control</h2>                     
-            
-                    <div class="pure-controls">                        
-                        <button type="button" class="pure-button" onclick='toggleLed(1);'>LED1</button>
-                        <button type="button" class="pure-button" onclick='toggleLed(2);'>LED2</button>
-                        <button type="button" class="pure-button" onclick='toggleLed(3);'>LED3</button>
-                    </div> 
-                    
+    <h1>Motor Control Dashboard</h1>
     
-            </fieldset>
-            </form>
-            
+    <div class="status-bar">
+        Ref: <span id="val-ref">0</span> | 
+        Pos: <span id="val-pos">0</span> | 
+        PWM: <span id="val-pwm">0</span>%
+    </div>
+
+    <div class="graph-container">
+        <h3>Position Control (Encoder Ticks)</h3>
+        <canvas id="posChart"></canvas>
+        <div class="legend">
+            <div class="legend-item"><div class="color-box color-ref"></div>Requested (Ref)</div>
+            <div class="legend-item"><div class="color-box color-pos"></div>Actual Position</div>
         </div>
     </div>
-</div>
 
+    <div class="graph-container">
+        <h3>PWM Output (%)</h3>
+        <canvas id="pwmChart"></canvas>
+        <div class="legend">
+            <div class="legend-item"><div class="color-box color-pwm"></div>Duty Cycle</div>
+        </div>
+    </div>
 
+<script>
+    // --- CONFIGURATION ---
+    const POLLING_RATE_MS = 50;   // Fetch data every 50ms
+    const HISTORY_SECONDS = 2;    // Keep 2 seconds of history
+    const MAX_POINTS = (HISTORY_SECONDS * 1000) / POLLING_RATE_MS; 
 
+    // --- DATA STORAGE ---
+    const dataRef = new Array(MAX_POINTS).fill(0);
+    const dataPos = new Array(MAX_POINTS).fill(0);
+    const dataPwm = new Array(MAX_POINTS).fill(0);
 
-<script src="ui.js"></script>
+    // --- SETUP CANVAS ---
+    function setupCanvas(id) {
+        const canvas = document.getElementById(id);
+        const ctx = canvas.getContext('2d');
+        // Handle high-DPI displays for crisp lines
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        return { canvas, ctx, width: rect.width, height: rect.height };
+    }
 
+    const graphPos = setupCanvas('posChart');
+    const graphPwm = setupCanvas('pwmChart');
+
+    // --- MAIN LOOP ---
+    setInterval(fetchData, POLLING_RATE_MS);
+
+    function fetchData() {
+        // This URL matches the C code: if(strncmp(resource, "/api_data", 9) == 0)
+        fetch('/api_data')
+            .then(response => response.json())
+            .then(json => {
+                // Update HTML text values
+                document.getElementById('val-ref').innerText = json.ref;
+                document.getElementById('val-pos').innerText = json.pos;
+                document.getElementById('val-pwm').innerText = json.pwm;
+
+                // Update Data Arrays (Shift old out, push new in)
+                dataRef.push(json.ref); dataRef.shift();
+                dataPos.push(json.pos); dataPos.shift();
+                dataPwm.push(json.pwm); dataPwm.shift();
+
+                // Draw Graphs
+                drawGraph(graphPos, [dataRef, dataPos], ['#FF5733', '#3375FF'], true); // Auto-scale
+                drawGraph(graphPwm, [dataPwm], ['#28B463'], false); // Fixed scale -100 to 100
+            })
+            .catch(err => console.error("Error fetching data:", err));
+    }
+
+    // --- DRAWING ENGINE ---
+    function drawGraph(graphObj, datasets, colors, autoScale) {
+        const { ctx, width, height } = graphObj;
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw Grid Background
+        ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i=0; i<width; i+=width/10) { ctx.moveTo(i,0); ctx.lineTo(i,height); } // Vertical
+        for(let i=0; i<height; i+=height/4) { ctx.moveTo(0,i); ctx.lineTo(width,i); } // Horizontal
+        ctx.stroke();
+
+        // Determine Scale (Min/Max)
+        let min, max;
+        if (autoScale) {
+            const allValues = datasets.flat();
+            min = Math.min(...allValues);
+            max = Math.max(...allValues);
+            // Add slight padding so lines don't touch edges
+            const range = max - min || 100; // avoid div by zero
+            min -= range * 0.1;
+            max += range * 0.1;
+        } else {
+            // Fixed scale for PWM (-100 to 100)
+            min = -110;
+            max = 110;
+        }
+
+        const mapY = (val) => height - ((val - min) / (max - min)) * height;
+        const stepX = width / (MAX_POINTS - 1);
+
+        // Draw Center Zero Line (useful for PWM)
+        if (min < 0 && max > 0) {
+            const zeroY = mapY(0);
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, zeroY);
+            ctx.lineTo(width, zeroY);
+            ctx.stroke();
+        }
+
+        // Draw Lines
+        datasets.forEach((data, index) => {
+            ctx.strokeStyle = colors[index];
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+                const x = i * stepX;
+                const y = mapY(data[i]);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        });
+    }
+</script>
 </body>
 </html>

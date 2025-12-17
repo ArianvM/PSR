@@ -9,7 +9,7 @@
 #include "tx_api.h"
 #include "stm32h7xx_hal.h"
 
-#define ENCODER_MAX_COUNT 500 //range from 0 to 500
+#define ENCODER_MAX_COUNT 256 //range from 0 to 500
 
 TX_MUTEX enc_dr; //declaring mutex
 
@@ -42,7 +42,7 @@ int32_t encoder_driver_get_position(void)
     if (ret == TX_SUCCESS)
     {
         // Read Hardware
-        uint16_t current_count = TIM1->CNT;
+        uint16_t current_count = TIM1->CNT % ENCODER_MAX_COUNT;
 
         // --- CRITICAL FIX HERE ---
         // We cast to (int16_t) so the math handles negative numbers correctly.
@@ -71,7 +71,9 @@ int32_t encoder_driver_get_position(void)
         previous_count = current_count;
 
         // Set return value
-        return_position = absolute_position_count;
+        //return_position = absolute_position_count;
+        return_position = current_count;
+
 
         // Release the Mutex
         tx_mutex_put(&enc_dr);
