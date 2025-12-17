@@ -1,6 +1,6 @@
-../NetXDuo/App/app_netxduo.c:95:6:MX_NetXDuo_Init	64	static
-../NetXDuo/App/app_netxduo.c:256:13:nx_app_thread_entry	176	static
-../NetXDuo/App/app_netxduo.c:451:6:ftpLogin	24	static
-../NetXDuo/App/app_netxduo.c:457:6:ftpLogout	24	static
-../NetXDuo/App/app_netxduo.c:462:6:http_request_notify	32	static
-../NetXDuo/App/app_netxduo.c:504:6:ipLinkCheckEntry	32	static
+../NetXDuo/App/app_netxduo.c:104:6:MX_NetXDuo_Init	64	static
+../NetXDuo/App/app_netxduo.c:265:13:nx_app_thread_entry	216	static
+../NetXDuo/App/app_netxduo.c:424:6:ftpLogin	24	static
+../NetXDuo/App/app_netxduo.c:430:6:ftpLogout	24	static
+../NetXDuo/App/app_netxduo.c:438:6:http_request_notify	376	static
+../NetXDuo/App/app_netxduo.c:530:6:ipLinkCheckEntry	32	static

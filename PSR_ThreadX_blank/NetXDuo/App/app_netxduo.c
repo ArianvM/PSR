@@ -73,7 +73,7 @@ CHAR *httpServerStack;
 // --- GLOBAL VARIABLES FOR WEB SERVER ---
 // We make these volatile because they are shared between the Main Thread and Web Server
 volatile int32_t current_ref_position = 0;
-volatile int32_t current_actual_pos = 0;   // Will be 0 on Steering Wheel (no motor)
+volatile int32_t current_pos = 0;   // Will be 0 on Steering Wheel (no motor)
 volatile int32_t current_pwm_duty = 0;     // Will be 0 on Steering Wheel (no motor)
 
 static NX_WEB_HTTP_SERVER_MIME_MAP app_mime_maps[] =
@@ -282,7 +282,8 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 	    UINT port;
 
 	    // --- NEW VARIABLES FOR STEERING WHEEL ---
-	    NX_PACKET *packet_ptr;      // Pointer for the packet we are creating
+	    NX_PACKET *outcoming_packet;      // Pointer for the packet we are creating
+	    NX_PACKET *incoming_packet;
 	    int32_t position_to_send;   // Variable to hold the encoder value
 	    // ----------------------------------------
 
@@ -368,114 +369,55 @@ static VOID nx_app_thread_entry (ULONG thread_input)
         // This ensures the graph shows your current knob position as "Reference"
         current_ref_position = position;
 
-        // Since we are the steering wheel, we don't have these, but we set them to 0 or mock values
-        current_actual_pos = 0;
-        current_pwm_duty = 0;
 
         // 3. Send UDP Packet to Controlled Wheel
-        ret = nx_packet_allocate(&NxAppPool, &packet_ptr, NX_UDP_PACKET, TX_WAIT_FOREVER);
+        ret = nx_packet_allocate(&NxAppPool, &outcoming_packet, NX_UDP_PACKET, TX_WAIT_FOREVER);
         if (ret == NX_SUCCESS)
         {
             // Append the Position Data
-            ret = nx_packet_data_append(packet_ptr, send_buffer, 4, &NxAppPool, TX_WAIT_FOREVER);
+            ret = nx_packet_data_append(outcoming_packet, send_buffer, 4, &NxAppPool, TX_WAIT_FOREVER);
 
             if (ret == NX_SUCCESS)
             {
                 // Send to the other board
-                nx_udp_socket_send(&UDPSocket, packet_ptr, TARGET_IP_ADDRESS, TARGET_PORT);
+                nx_udp_socket_send(&UDPSocket, outcoming_packet, TARGET_IP_ADDRESS, TARGET_PORT);
             }
             else
             {
-                nx_packet_release(packet_ptr);
+                nx_packet_release(outcoming_packet);
             }
         }
 
+        ret = nx_udp_socket_receive(&UDPSocket, &incoming_packet, 5);
+
+        	if(ret == NX_SUCCESS)
+        	{
+        		ret = nx_packet_data_retrieve(incoming_packet, data_buffer, &bytes_read);
+
+        		if(ret == NX_SUCCESS)
+        		{
+        			char msg [8];
+        			int pos, speed;
+        			memcpy(msg, data_buffer, 8);
+        			sscanf(msg, "%d:%d", &pos, &speed);
+        			printf("pos:%d, speed:%d", pos, speed);
+
+        			current_pos = pos;
+        			current_pwm_duty = speed;
+
+
+        		}
+        		nx_packet_release(incoming_packet);
+
+
+        		//nx_udp_source_extract(incoming_packet, &ipAddress, &port);
+        	}
         // 4. Sleep (10ms = 100Hz refresh rate)
         tx_thread_sleep(1);
     }
 
-
-
-	        /* --- OLD RECEIVER LOGIC (COMMENTED OUT) ---
-	        // wait for one second or until the UDP is received
-	        ret = nx_udp_socket_receive(&UDPSocket, &incoming_packet, 100);
-
-	        if (ret == NX_SUCCESS)
-	        {
-	            // if packet has been successfully received, then retrieved the data into local buffer
-	            ret = nx_packet_data_retrieve(incoming_packet, data_buffer, &bytes_read);
-
-	            if (ret == NX_SUCCESS)
-	            {
-	                // get the source IP address and port
-	                nx_udp_source_extract(incoming_packet, &ipAddress, &port);
-	                printf("Socket received %d bytes from %d.%d.%d.%d:%d\n",
-	                        (int) bytes_read, (int) (ipAddress >> 24) & 0xFF, (int) (ipAddress >> 16) & 0xFF,
-	                        (int) (ipAddress >> 8) & 0xFF, (int) ipAddress & 0xFF, port);
-
-	                // allocate packet for reply
-	                ret = nx_packet_allocate(&NxAppPool, &outcoming_packet, NX_UDP_PACKET, 100);
-	                if (ret != NX_SUCCESS)
-	                {
-	                    // if error has been detected, print the error code and jump to the beginning of the while loop commands
-	                    printf("Packet allocate error %02x\n", ret);
-	                    continue;
-	                }
-
-	                // append data to the packet
-	                ret = nx_packet_data_append(outcoming_packet, data_buffer,
-	                        bytes_read, &NxAppPool, 100);
-
-	                if (ret != NX_SUCCESS)
-	                {
-	                    // if error has been detected, print the error code and jump to the beginning of the while loop commands
-	                    printf("Packet append error %02x\n", ret);
-	                    continue;
-	                }
-
-	                // send the data to the IP address and port which has been extracted from the incoming packet
-	                ret = nx_udp_socket_send(&UDPSocket, outcoming_packet,  ipAddress, port);
-	                if (ret != NX_SUCCESS)
-	                {
-	                    // in the case of socket send failure we MUST release the outcoming packet!
-	                    printf("UDP send error %02x\n", ret);
-	                    nx_packet_release(outcoming_packet);
-	                }
-	                else
-	                {
-	                    // in the case of socket success we MUST NOT release the outcoming packet!
-	                    printf("UDP send successfully\n");
-	                }
-	            }
-
-	            // we MUST always release the incoming packet
-	            nx_packet_release(incoming_packet);
-	            printf("Packets available %d\n\n", (int) NxAppPool.nx_packet_pool_available);
-	        }
-	        */
-
-	        // ... inside nx_app_thread_entry ...
-
-	                /*/ Create webserver
-	                // IMPORTANT: The last argument must match the function name we fixed above (http_request_notify)
-	                ret = nx_web_http_server_create(&httpServer, "HTTP server", &NetXDuoEthIpInstance, HTTP_SERVER_PORT,
-	                        &sdio_disk, (VOID *) httpServerStack, 2*NX_APP_THREAD_STACK_SIZE, &NxAppPool,
-	                        NULL, http_request_notify);
-
-	                if (ret != NX_SUCCESS)
-	                {
-	                    printf("HTTP server create error. %02X\n", ret);
-	                }
-
-	                ret = nx_web_http_server_mime_maps_additional_set(&httpServer, &app_mime_maps[0], 6);
-
-	                if (nx_web_http_server_start(&httpServer) == NX_SUCCESS)
-	                {
-	                    printf("HTTP server started.\n");
-	                }
-	    }
-					*/
   /* USER CODE END Nx_App_Thread_Entry 0 */
+	    //MOTOR_MESSAGE previous_inf = { 0 }; //This has to be declared before and actualize when the motor is moved, comment in the receiving board
 
 }
 /* USER CODE BEGIN 1 */
@@ -491,89 +433,119 @@ UINT ftpLogout(struct NX_FTP_SERVER_STRUCT *ftp_server_ptr, ULONG client_ip_addr
 }
 
 
-
 /* USER CODE BEGIN 1 */
-
-/* 1. MATCH THE NAME TO THE PROTOTYPE AT THE TOP OF YOUR FILE */
 /* USER CODE BEGIN 1 */
+UINT http_request_notify(NX_WEB_HTTP_SERVER *server_ptr, UINT request_type,
+		CHAR *resource, NX_PACKET *packet_ptr) {
+	NX_PARAMETER_NOT_USED(packet_ptr);
+	NX_PARAMETER_NOT_USED(server_ptr);
 
-/* ... keep your ftpLogin and ftpLogout functions as they are ... */
+	// 1. Only accept GET requests
+	if (request_type != NX_WEB_HTTP_SERVER_GET_REQUEST) {
+		return NX_SUCCESS;
+	}
 
-UINT http_request_notify(NX_WEB_HTTP_SERVER *server_ptr, UINT request_type, CHAR *resource, NX_PACKET *packet_ptr)
-{
-    NX_PACKET *resp_packet;
-    CHAR data[128];
-    ULONG length;
-    UINT status;
+	// 2. Handle the Data Request
+	if (strncmp(resource, "/api_data", 9) == 0) {
 
-    // Check for API Request
-    if (request_type == NX_WEB_HTTP_SERVER_GET_REQUEST &&
-       (strncmp(resource, "/api_data", 9) == 0))
-    {
-        // 1. Format the JSON using the GLOBAL variables updated in the main loop
-        // Format: {"ref": 123, "pos": 0, "pwm": 0}
-        length = sprintf(data, "{\"ref\": %ld, \"pos\": %ld, \"pwm\": %ld}",
-                        (long)current_ref_position,
-                        (long)current_actual_pos,
-                        (long)current_pwm_duty);
+		// Debug LED: Toggles every time the web page asks for data
+		//HAL_GPIO_TogglePin(LED1_G_GPIO_Port, LED1_G_Pin);
 
-        // 2. Allocate Packet
-        status = nx_packet_allocate(server_ptr->nx_web_http_server_packet_pool_ptr,
-                                    &resp_packet,
-                                    NX_TCP_PACKET,
-                                    NX_WAIT_FOREVER);
+		UINT status;
+		NX_PACKET *resp_packet;
+		CHAR full_response[256];
+		CHAR json_body[64];
 
-        if (status == NX_SUCCESS)
-        {
-            // 3. Header
-            nx_web_http_server_callback_generate_response_header(server_ptr,
-                                                                 &resp_packet,
-                                                                 NX_WEB_HTTP_STATUS_OK,
-                                                                 length,
-                                                                 "application/json",
-                                                                 NX_NULL);
-            // 4. Body
-            nx_packet_data_append(resp_packet, data, length,
-                                  server_ptr->nx_web_http_server_packet_pool_ptr,
-                                  NX_WAIT_FOREVER);
-            // 5. Send
-            nx_web_http_server_callback_packet_send(server_ptr, resp_packet);
+		// --- THE CRITICAL FIX ---
+		// We use 'current_ref_position' because that is what your
+		// Main Loop is actually updating with 'encoder_driver_get_position()'
+		memset(json_body, 0, sizeof(json_body));
 
-            return NX_WEB_HTTP_CALLBACK_COMPLETED;
-        }
-    }
-
-    // Default handling for index.html
-    if ((strcmp(resource, "/") == 0) || (strcmp(resource, "/index.htm") == 0)) {
-        strcpy(resource, "/index.html");
-    }
-
-    return NX_SUCCESS;
-}
-
-/* ... keep your ipLinkCheckEntry function as is ... */
+		// We send 0 for 'ref' and 'pwm' for now, just to get 'pos' working
+		snprintf(json_body, sizeof(json_body), "{\"ref\": %ld, \"pos\": %ld, \"pwm\": %ld}",
+				(long)current_ref_position,
+				(long)current_pos,
+				(long)current_pwm_duty);
 
 
 
-/* --- THIS IS THE MISSING FUNCTION THAT CAUSED YOUR ERROR --- */
-VOID ipLinkCheckEntry(ULONG ini)
-{
-    while (1)
-    {
-        ULONG actual_status;
-        UINT ret;
+		size_t body_len = strlen(json_body);
 
-        ret = nx_ip_interface_status_check(&NetXDuoEthIpInstance, 0, NX_IP_LINK_ENABLED, &actual_status, 10);
+		// Prepare HTTP Header
+		memset(full_response, 0, sizeof(full_response));
+		sprintf(full_response,
+				"HTTP/1.1 200 OK\r\n"
+				"Content-Type: application/json\r\n"
+				"Content-Length: %d\r\n"
+				"Connection: close\r\n"
+				"Access-Control-Allow-Origin: *\r\n"
+				"\r\n"
+				"%s",
+				(int)body_len,
+				json_body);
 
-        if (ret == TX_SUCCESS && actual_status == NX_IP_LINK_ENABLED)
-        {
-            nx_ip_driver_direct_command(&NetXDuoEthIpInstance, NX_LINK_ENABLE, &actual_status);
-        }
+		size_t total_len = strlen(full_response);
 
-        tx_thread_sleep(100);
-    }
+		// Allocate packet
+		status = nx_packet_allocate(server_ptr->nx_web_http_server_packet_pool_ptr,
+									&resp_packet,
+									NX_TCP_PACKET,
+									TX_WAIT_FOREVER);
+
+		if (status != NX_SUCCESS) return status;
+
+		// Append data
+		status = nx_packet_data_append(resp_packet, full_response, total_len,
+									   server_ptr->nx_web_http_server_packet_pool_ptr,
+									   TX_WAIT_FOREVER);
+
+		if (status != NX_SUCCESS) {
+			nx_packet_release(resp_packet);
+			return status;
+		}
+
+		// Close connection immediately (Stateless)
+		server_ptr->nx_web_http_server_keepalive = NX_FALSE;
+
+		// Send
+		status = nx_web_http_server_callback_packet_send(server_ptr, resp_packet);
+
+		if (status != NX_SUCCESS) {
+			nx_packet_release(resp_packet);
+			return status;
+		}
+
+		return NX_WEB_HTTP_CALLBACK_COMPLETED;
+	}
+
+	// 3. Handle Index Redirect (Standard NetX stuff)
+	if ((strcmp(resource, "/") == 0) || (strcmp(resource, "/index.htm") == 0)) {
+		strcpy(resource, "/index.html");
+	}
+
+	return NX_SUCCESS;
 }
 /* USER CODE END 1 */
+
+VOID ipLinkCheckEntry(ULONG ini) {
+	while (1) {
+		ULONG actual_status;
+		UINT ret;
+
+		ret = nx_ip_interface_status_check(&NetXDuoEthIpInstance, 0,
+				NX_IP_LINK_ENABLED, &actual_status, 10);
+
+		if (ret == TX_SUCCESS && actual_status == NX_IP_LINK_ENABLED) {
+			nx_ip_driver_direct_command(&NetXDuoEthIpInstance, NX_LINK_ENABLE,
+					&actual_status);
+		}
+
+		tx_thread_sleep(100);
+	}
+
+}
+/* USER CODE END 1 */
+
 /* ... existing ftp functions ... */
 
 

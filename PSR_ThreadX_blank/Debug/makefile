@@ -75,8 +75,8 @@ all: main-build
 main-build: PSR_ThreadX_blank.elf secondary-outputs
 
 # Tool invocations
-PSR_ThreadX_blank.elf PSR_ThreadX_blank.map: $(OBJS) $(USER_OBJS) C:\Users\hecto\STM32CubeIDE\workspace_1.19.0\PSR_ThreadX_blank\STM32H753ZITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "PSR_ThreadX_blank.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\hecto\STM32CubeIDE\workspace_1.19.0\PSR_ThreadX_blank\STM32H753ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="PSR_ThreadX_blank.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+PSR_ThreadX_blank.elf PSR_ThreadX_blank.map: $(OBJS) $(USER_OBJS) C:\Users\hecto\Documents\cybernetics\ and\ robotics\Real\ Time\ Systems\ Programming\Semestral\ project\PSR\PSR_ThreadX_blank\STM32H753ZITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "PSR_ThreadX_blank.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\hecto\Documents\cybernetics and robotics\Real Time Systems Programming\Semestral project\PSR\PSR_ThreadX_blank\STM32H753ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="PSR_ThreadX_blank.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
