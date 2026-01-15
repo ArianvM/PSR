@@ -1,2 +1,0 @@
-../Core/Src/encoder_driver.c:20:6:encoder_driver_initialize	16	static
-../Core/Src/encoder_driver.c:32:9:encoder_driver_get_position	24	static
